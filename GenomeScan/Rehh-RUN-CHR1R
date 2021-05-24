@@ -1,0 +1,64 @@
+library(rehh)
+library(tidyverse)
+#
+house_hh <- data2haplohh(hap_file = "species1.vcf",
+                         polarize_vcf = FALSE)
+# bactrianus
+bac_hh <- data2haplohh(hap_file = "species2.vcf",
+                         polarize_vcf = FALSE)
+# filter on MAF - here 0.05
+house_hh_f <- subset(house_hh, min_maf = 0.05)
+bac_hh_f <- subset(bac_hh, min_maf = 0.05)
+# perform scans
+house_scan <- scan_hh(house_hh_f, polarized = FALSE)
+bac_scan <- scan_hh(bac_hh_f, polarized = FALSE)
+# perform iHS on house
+house_ihs <- ihh2ihs(house_scan, freqbin = 1)
+bac_ihs <- ihh2ihs(bac_scan, freqbin = 1)
+#plot statistics
+pdf("Chr1.pdf")
+ggplot(house_ihs$ihs, aes(POSITION, IHS)) + geom_point()
+#Or we can plot the log P-value to test for outliers.
+ggplot(house_ihs$ihs, aes(POSITION, LOGPVALUE)) + geom_point() + geom_hline(yintercept=5, linetype="dashed", color = "red")
+ggplot(bac_ihs$ihs, aes(POSITION, LOGPVALUE)) + geom_point() + geom_hline(yintercept=5, linetype="dashed", color = "red")
+#############
+####################with both
+# perform xp-ehh
+house_bac <- ies2xpehh(bac_scan, house_scan,
+                       popname1 = "bicknell", popname2 = "minimus",
+                       include_freq = T,standardize = TRUE,standardize = TRUE)
+# plot
+ggplot(house_bac, aes(POSITION, XPEHH_bicknell_minimus)) + geom_point()
+ggplot(house_bac, aes(POSITION, LOGPVALUE)) + geom_point() + geom_hline(yintercept=5, linetype="dashed", color = "red")
+###
+# find the highest hit
+hit <- house_bac %>% arrange(desc(LOGPVALUE)) %>% top_n(1)
+# get SNP position
+x <- hit$POSITION
+marker_id_h <- which(house_hh_f@positions == x)
+marker_id_b <- which(bac_hh_f@positions == x)
+#Now we are ready to plot the bifurcation of haplotypes around our site of selection. We do this like so:
+
+house_furcation <- calc_furcation(house_hh_f, mrk = marker_id_h)
+bac_furcation <- calc_furcation(bac_hh_f, mrk = marker_id_b)
+
+#We can also plot both of these to have a look at them:
+
+plot(house_furcation)
+plot(bac_furcation)
+
+#Calculating the furcation pattern also makes it possible to calculate the haplotype length around our signature of selection.
+
+house_haplen <- calc_haplen(house_furcation)
+bac_haplen <- calc_haplen(bac_furcation)
+
+#With the haplotype length calculated, we can now plot this to see how haplotype structure differs between our two populations.
+
+plot(house_haplen)
+plot(bac_haplen)
+
+# write out house bactrianus xpEHH
+house_bac <- tbl_df(house_bac)
+colnames(house_bac) <- tolower(colnames(house_bac))
+write_tsv(house_bac, "./Chr1-species1-species2_xpEHH.tsv")
+dev.off()
